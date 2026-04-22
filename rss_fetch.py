@@ -113,6 +113,7 @@ def fetch_all():
             cached += 1
         else:
             errors += 1
+            print(f'  ERROR: {feed["title"] or feed["url"]}')
     print(f'  Done: {fetched} fetched, {cached} cached, {errors} errors')
     _cleanup()
     return {'fetched': fetched, 'cached': cached, 'errors': errors}
