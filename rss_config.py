@@ -4,7 +4,7 @@ PORT = int(os.environ.get('PORT', 8180))
 DB_NAME = os.environ.get('DB_NAME', 'kfs_rss')
 DB_USER = os.environ.get('DB_USER', 'kofis')
 DB_PASSWORD = os.environ.get('DB_PASSWORD', '')
-DB_HOST = os.environ.get('DB_HOST', 'localhost')
+DB_HOST = os.environ.get('DB_HOST', '')  # empty = Unix socket (local trust)
 DB_PORT = int(os.environ.get('DB_PORT', 5432))
 
 JWT_SECRET = os.environ.get('JWT_SECRET', 'dev-secret-change-me')

@@ -9,10 +9,13 @@ _pool = None
 def _get_conn():
     global _pool
     if _pool is None or _pool.closed:
-        _pool = psycopg2.connect(
-            dbname=cfg.DB_NAME, user=cfg.DB_USER, password=cfg.DB_PASSWORD,
-            host=cfg.DB_HOST, port=cfg.DB_PORT
-        )
+        kwargs = {'dbname': cfg.DB_NAME, 'user': cfg.DB_USER}
+        if cfg.DB_HOST:
+            kwargs['host'] = cfg.DB_HOST
+            kwargs['port'] = cfg.DB_PORT
+        if cfg.DB_PASSWORD:
+            kwargs['password'] = cfg.DB_PASSWORD
+        _pool = psycopg2.connect(**kwargs)
         _pool.autocommit = False
     return _pool
 
