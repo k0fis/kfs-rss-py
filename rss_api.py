@@ -35,7 +35,7 @@ def _iso(dt):
 
 
 def _article_dto(row, feed_hash_val=None, feed_title=None, category=None):
-    return {
+    dto = {
         'guid': row['guid'],
         'title': row['title'] or '',
         'link': row['link'] or '',
@@ -50,6 +50,9 @@ def _article_dto(row, feed_hash_val=None, feed_title=None, category=None):
         'read': bool(row.get('is_read')),
         'starred': bool(row.get('is_starred')),
     }
+    if row.get('llm_summary'):
+        dto['llmSummary'] = row['llm_summary']
+    return dto
 
 
 # ── feeds ────────────────────────────────────────────────
@@ -59,7 +62,7 @@ def _article_dto(row, feed_hash_val=None, feed_title=None, category=None):
 def get_feeds():
     rows = db.query('''
         SELECT f.id, f.feed_hash, f.title, f.url, f.site_url,
-               f.last_fetched_at, f.last_error,
+               f.last_fetched_at, f.last_error, f.llm_mode, f.llm_lang,
                uf.category,
                (SELECT COUNT(*) FROM articles a2 WHERE a2.feed_id = f.id) AS article_count,
                (SELECT COUNT(*) FROM articles a3
@@ -85,6 +88,8 @@ def get_feeds():
             'lastUpdated': _iso(r['last_fetched_at']),
             'error': r['last_error'],
             'unreadCount': r['unread_count'],
+            'llmMode': r['llm_mode'] or '',
+            'llmLang': r['llm_lang'] or '',
         } for r in rows]
     )
 
@@ -102,7 +107,7 @@ def get_feed_articles(hash):
     if not uf:
         return jsonify(error='Not subscribed'), 403
     rows = db.query('''
-        SELECT a.*, ua.is_read, ua.is_starred
+        SELECT a.*, a.llm_summary, ua.is_read, ua.is_starred
         FROM articles a
         LEFT JOIN user_articles ua ON ua.article_id = a.id AND ua.user_id = %s
         WHERE a.feed_id = %s
@@ -160,14 +165,20 @@ def unsubscribe_feed(hash):
 @require_auth
 def update_feed(hash):
     data = request.get_json(force=True)
-    category = data.get('category', '')
     feed = db.query_one('SELECT id FROM feeds WHERE feed_hash = %s', (hash,))
     if not feed:
         return jsonify(error='Feed not found'), 404
-    db.execute(
-        'UPDATE user_feeds SET category = %s WHERE user_id = %s AND feed_id = %s',
-        (category, g.user_id, feed['id'])
-    )
+    if 'category' in data:
+        db.execute(
+            'UPDATE user_feeds SET category = %s WHERE user_id = %s AND feed_id = %s',
+            (data['category'], g.user_id, feed['id'])
+        )
+    if 'llmMode' in data:
+        mode = data['llmMode'] or None
+        db.execute("UPDATE feeds SET llm_mode=%s WHERE id=%s", (mode, feed['id']))
+    if 'llmLang' in data:
+        lang = data['llmLang'] or None
+        db.execute("UPDATE feeds SET llm_lang=%s WHERE id=%s", (lang, feed['id']))
     return '', 204
 
 
@@ -282,7 +293,7 @@ def unstar_article():
 @require_auth
 def get_starred():
     rows = db.query('''
-        SELECT a.*, ua.is_read, ua.is_starred, f.feed_hash, f.title AS feed_title,
+        SELECT a.*, a.llm_summary, ua.is_read, ua.is_starred, f.feed_hash, f.title AS feed_title,
                COALESCE(uf.category, '') AS category
         FROM user_articles ua
         JOIN articles a ON a.id = ua.article_id
@@ -305,7 +316,7 @@ def search_articles():
         return jsonify(articles=[])
     ts_query = ' & '.join(q.split())
     rows = db.query('''
-        SELECT a.*, ua.is_read, ua.is_starred, f.feed_hash, f.title AS feed_title,
+        SELECT a.*, a.llm_summary, ua.is_read, ua.is_starred, f.feed_hash, f.title AS feed_title,
                COALESCE(uf.category, '') AS category
         FROM articles a
         JOIN feeds f ON f.id = a.feed_id
@@ -431,6 +442,42 @@ def import_opml():
             )
             added += 1
     return jsonify(added=added, skipped=skipped)
+
+
+# ── LLM queue (internal, no auth) ───────────────────────
+
+@app.get('/llm-queue/next')
+def llm_queue_next():
+    from rss_llm_queue import dequeue_next
+    item = dequeue_next()
+    if not item:
+        return '', 204
+    return jsonify(item)
+
+
+@app.post('/llm-queue/<int:qid>/result')
+def llm_queue_result(qid):
+    from rss_llm_queue import save_result
+    data = request.get_json()
+    if not data or not data.get('resultText'):
+        return jsonify(error='resultText required'), 400
+    if save_result(qid, data['resultText']):
+        return jsonify(status='ok')
+    return jsonify(error='not found'), 404
+
+
+@app.post('/llm-queue/<int:qid>/fail')
+def llm_queue_fail(qid):
+    from rss_llm_queue import mark_failed
+    data = request.get_json() or {}
+    mark_failed(qid, data.get('error', 'unknown'))
+    return jsonify(status='failed')
+
+
+@app.get('/llm-queue/status')
+def llm_queue_status():
+    from rss_llm_queue import queue_status
+    return jsonify(queue_status())
 
 
 # ── main ─────────────────────────────────────────────────

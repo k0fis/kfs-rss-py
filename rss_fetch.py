@@ -62,14 +62,18 @@ def _fetch_single(feed):
         image = extract_image(entry)
         pub_date = extract_date(entry)
         title_a = getattr(entry, 'title', '') or ''
-        db.execute('''
+        row = db.execute_returning('''
             INSERT INTO articles (feed_id, guid, title, link, author, summary, content, image, published_at, fetched_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
             ON CONFLICT (feed_id, guid) DO UPDATE SET
                 title = EXCLUDED.title, link = EXCLUDED.link, author = EXCLUDED.author,
                 summary = EXCLUDED.summary, content = EXCLUDED.content,
                 image = EXCLUDED.image, published_at = EXCLUDED.published_at
+            RETURNING id, (xmax = 0) AS is_new
         ''', (feed['id'], guid, title_a, link, author, summary, content, image, pub_date))
+        if row and row['is_new']:
+            from rss_llm_queue import enqueue_if_needed
+            enqueue_if_needed(row['id'], feed)
     return 'fetched'
 
 
@@ -100,6 +104,8 @@ def _cleanup():
 
 
 def fetch_all():
+    from rss_llm_queue import reset_timed_out
+    reset_timed_out()
     feeds = db.query(
         'SELECT DISTINCT f.* FROM feeds f JOIN user_feeds uf ON uf.feed_id = f.id'
     )
