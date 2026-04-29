@@ -43,6 +43,7 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/}
           tar czf kfs-rss-py-${VERSION}.tar.gz \
             rss_api.py rss_fetch.py rss_db.py rss_config.py rss_jwt.py rss_feed_parser.py \
+            rss_llm_queue.py \
             requirements.txt migrations/
 
       - name: Create Release
