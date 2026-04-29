@@ -1,6 +1,6 @@
 #!/bin/bash
 # rss-llm-worker.sh — Mac, polls k-server for LLM tasks
-K_SERVER="${K_SERVER:-http://k-server.local:8180}"
+K_SERVER="${K_SERVER:-https://k-server.local/api/rss}"
 ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:?Set ANTHROPIC_API_KEY}"
 MODEL="${LLM_MODEL:-claude-haiku-4-5-20251001}"
 POLL_INTERVAL="${POLL_INTERVAL:-5}"

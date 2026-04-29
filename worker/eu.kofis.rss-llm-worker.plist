@@ -12,9 +12,9 @@
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+        <string>/Users/I755596/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
         <key>K_SERVER</key>
-        <string>http://k-server.local:8180</string>
+        <string>https://k-server.local/api/rss</string>
     </dict>
     <key>KeepAlive</key>
     <true/>

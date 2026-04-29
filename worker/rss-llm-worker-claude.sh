@@ -1,12 +1,12 @@
 #!/bin/bash
 # rss-llm-worker-claude.sh — Mac, polls k-server, uses claude CLI
-K_SERVER="${K_SERVER:-http://k-server.local:8180}"
+K_SERVER="${K_SERVER:-https://k-server.local/api/rss}"
 POLL_INTERVAL="${POLL_INTERVAL:-5}"
 
 echo "RSS LLM worker [claude CLI] (server=$K_SERVER)"
 
 while true; do
-    TASK=$(curl -sf "$K_SERVER/llm-queue/next")
+    TASK=$(curl -sfk "$K_SERVER/llm-queue/next")
     if [ -n "$TASK" ] && [ "$TASK" != "" ]; then
         ID=$(echo "$TASK" | jq -r '.id')
         MODE=$(echo "$TASK" | jq -r '.mode')
@@ -28,12 +28,12 @@ $SOURCE"
         RESULT=$(echo "$PROMPT" | claude --print 2>/dev/null)
 
         if [ -n "$RESULT" ]; then
-            curl -sf -X POST "$K_SERVER/llm-queue/$ID/result" \
+            curl -sfk -X POST "$K_SERVER/llm-queue/$ID/result" \
                 -H "Content-Type: application/json" \
                 -d "{\"resultText\":$(echo "$RESULT" | jq -Rs .)}"
             echo "[$(date '+%H:%M:%S')] #$ID OK ($MODE)"
         else
-            curl -sf -X POST "$K_SERVER/llm-queue/$ID/fail" \
+            curl -sfk -X POST "$K_SERVER/llm-queue/$ID/fail" \
                 -H "Content-Type: application/json" \
                 -d "{\"error\":\"claude CLI returned empty response\"}"
             echo "[$(date '+%H:%M:%S')] #$ID FAIL: empty response"
