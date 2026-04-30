@@ -368,6 +368,48 @@ def weekly_report():
     return _report(7, 'last 7 days')
 
 
+@app.get('/reports/newspaper')
+@require_auth
+def newspaper_report():
+    date_str = request.args.get('date')
+    if date_str:
+        try:
+            day = datetime.strptime(date_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+        except ValueError:
+            return jsonify(error='Invalid date format, use YYYY-MM-DD'), 400
+        start = day
+        end = day + timedelta(days=1)
+    else:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(days=1)
+    rows = db.query('''
+        SELECT a.title, a.link, a.published_at, a.author, a.summary,
+               a.image, a.llm_summary, f.title AS feed_title,
+               COALESCE(uf.category, '') AS category
+        FROM articles a
+        JOIN feeds f ON f.id = a.feed_id
+        JOIN user_feeds uf ON uf.feed_id = f.id AND uf.user_id = %s
+        WHERE a.published_at >= %s AND a.published_at < %s
+        ORDER BY a.published_at DESC
+    ''', (g.user_id, start, end))
+    return jsonify(
+        generated=_iso(datetime.now(timezone.utc)),
+        date=date_str or start.strftime('%Y-%m-%d'),
+        count=len(rows),
+        articles=[{
+            'title': r['title'] or '',
+            'link': r['link'] or '',
+            'date': _iso(r['published_at']),
+            'author': r['author'] or '',
+            'feed': r['feed_title'] or '',
+            'category': r['category'],
+            'summary': r['summary'] or '',
+            'llmSummary': r['llm_summary'] or '',
+            'image': r['image'] or '',
+        } for r in rows]
+    )
+
+
 # ── OPML ─────────────────────────────────────────────────
 
 @app.get('/feeds/opml')
